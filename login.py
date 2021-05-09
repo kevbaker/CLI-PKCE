@@ -15,9 +15,24 @@ from werkzeug.serving import make_server
 import dotenv
 from flask import Flask, request
 
+
+# Load Settings from dotenv
+env_path = pathlib.Path('.') / '.env'
+dotenv.load_dotenv(dotenv_path=env_path)
+
+# Set Identity Provider Settings
+auth_listener_host = os.getenv('AUTH_LISTENER_HOST')
+auth_listener_port = os.getenv('AUTH_LISTENER_PORT')
+auth_client_id = os.getenv('AUTH_CLIENT_ID')
+auth_tenant = os.getenv('AUTH_TENANT')
+# auth_clients_url = os.getenv('AUTH_CLIENTS_URL')
+auth_authorize_url = os.getenv('AUTH_AUTHORIZE_URL')
+auth_token_url = os.getenv('AUTH_TOKEN_URL')
+auth_audience_url = os.getenv('AUTH_AUDIENCE_URL')
+auth_scopes = os.getenv('AUTH_SCOPES')
+
+# Setup Auth Listener
 app = Flask(__name__)
-
-
 @app.route("/callback")
 def callback():
     """
@@ -45,7 +60,7 @@ class ServerThread(threading.Thread):
 
     def __init__(self, app):
         threading.Thread.__init__(self)
-        self.srv = make_server('127.0.0.1', 5000, app)
+        self.srv = make_server(auth_listener_host, auth_listener_port, app)
         self.ctx = app.app_context()
         self.ctx.push()
 
@@ -57,7 +72,7 @@ class ServerThread(threading.Thread):
         self.srv.shutdown()
 
 
-def auth0_url_encode(byte_data):
+def auth_url_encode(byte_data):
     """
     Safe encoding handles + and /, and also replace = with nothing
     :param byte_data:
@@ -67,27 +82,26 @@ def auth0_url_encode(byte_data):
 
 
 def generate_challenge(a_verifier):
-    return auth0_url_encode(hashlib.sha256(a_verifier.encode()).digest())
+    return auth_url_encode(hashlib.sha256(a_verifier.encode()).digest())
 
 
-env_path = pathlib.Path('.') / '.env'
-dotenv.load_dotenv(dotenv_path=env_path)
-
-verifier = auth0_url_encode(secrets.token_bytes(32))
+# Setup auth variables
+verifier = auth_url_encode(secrets.token_bytes(32))
 challenge = generate_challenge(verifier)
-state = auth0_url_encode(secrets.token_bytes(32))
-client_id = os.getenv('AUTH0_CLIENT_ID')
-tenant = os.getenv('AUTH0_TENANT')
-redirect_uri = 'http://127.0.0.1:5000/callback'
+state = auth_url_encode(secrets.token_bytes(32))
+redirect_uri = f"http://{auth_listener_host}:{auth_listener_port}/callback"
+
+
 
 # We generate a nonce (state) that is used to protect against attackers invoking the callback
-base_url = 'https://%s.auth0.com/authorize?' % tenant
+# base_url = 'https://%s.auth0.com/authorize?' % tenant
+base_url = f"{auth_authorize_url}?"
 url_parameters = {
-    'audience': 'https://gateley-empire-life.auth0.com/api/v2/',
-    'scope': 'profile openid email read:clients create:clients read:client_keys',
+    'audience': auth_audience_url,
+    'scope': auth_scopes,
     'response_type': 'code',
     'redirect_uri': redirect_uri,
-    'client_id': client_id,
+    'client_id': auth_client_id,
     'code_challenge': challenge.replace('=', ''),
     'code_challenge_method': 'S256',
     'state': state
@@ -115,7 +129,8 @@ if error_message:
     exit(-1)
 
 # Exchange the code for a token
-url = 'https://%s.auth0.com/oauth/token' % tenant
+# url = 'https://%s.auth0.com/oauth/token' % tenant
+url = auth_token_url
 headers = {'Content-Type': 'application/json'}
 body = {'grant_type': 'authorization_code',
         'client_id': client_id,
@@ -125,12 +140,16 @@ body = {'grant_type': 'authorization_code',
         'redirect_uri': redirect_uri}
 r = requests.post(url, headers=headers, data=json.dumps(body))
 data = r.json()
+print("REQUEST RESULTS:")
+print(json.dumps(data))
+
 
 # Use the token to list the clients
-url = 'https://%s.auth0.com/api/v2/clients' % tenant
-headers = {'Authorization': 'Bearer %s' % data['access_token']}
-r = requests.get(url, headers=headers)
-data = r.json()
+# url = 'https://%s.auth0.com/api/v2/clients' % tenant
+# url = auth_clients_url
+# headers = {'Authorization': 'Bearer %s' % data['access_token']}
+# r = requests.get(url, headers=headers)
+# data = r.json()
 
-for client in data:
-    print("Client: " + client['name'])
+# for client in data:
+#     print("Client: " + client['name'])
