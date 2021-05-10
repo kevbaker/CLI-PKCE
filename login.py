@@ -97,7 +97,7 @@ redirect_uri = f"http://{auth_listener_host}:{auth_listener_port}/callback"
 # base_url = 'https://%s.auth0.com/authorize?' % tenant
 base_url = f"{auth_authorize_url}?"
 url_parameters = {
-    'audience': auth_audience_url,
+    # 'audience': auth_audience_url,
     'scope': auth_scopes,
     'response_type': 'code',
     'redirect_uri': redirect_uri,
